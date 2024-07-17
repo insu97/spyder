@@ -5,30 +5,49 @@ import numpy as np
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
-from function.DeepLearning import relu, softmax
+from function.DeepLearning import relu, softmax, cross_entropy_error, numerical_gradient
 
 #%% 01. drug_model
-def init_network():
-    network = {}
-    network['W1'] = 0.01 * np.random.randn(9, 6)
-    network['b1'] = np.zeros(6)
-    network['W2'] = 0.01 * np.random.randn(6, 6)
-    network['b2'] = np.zeros(6)
-    network['W3'] = 0.01 * np.random.randn(6, 5)
-    network['b3'] = np.zeros(5)
+class simpleNet:
+    def __init__(self, input_size, hidden_size, output_size, weight_init_std=0.01):
+        # 가중치 초기화
+        self.params = {}
+        self.params['W1'] = weight_init_std * np.random.randn(input_size, hidden_size)
+        self.params['b1'] = np.zeros(hidden_size)
+        self.params['W2'] = weight_init_std * np.random.randn(hidden_size, output_size)
+        self.params['b2'] = np.zeros(output_size)
+    
+    def predict(self, x):
+        W1, W2 = self.params['W1'], self.params['W2']
+        b1, b2 = self.params['b1'], self.params['b2']
+        a1 = np.dot(x, W1) + b1
+        z1 = relu(a1)
+        a2 = np.dot(z1, W2) + b2
+        y = softmax(a2)
 
-    return network
+        return y
+    
+    def accuracy(self, x, t):
+        y = self.predict(x)
+        y = np.argmax(y, axis=1)
+        if t.ndim != 1:
+            t = np.argmax(t, axis=1)
 
-def predict(network, x):
-    W1, W2, W3 = network['W1'], network['W2'], network['W3']
-    b1, b2, b3 = network['b1'], network['b2'], network['b3']
-
-    a1 = np.dot(x, W1) + b1
-    z1 = relu(a1)
-    a2 = np.dot(z1, W2) + b2
-    z2 = relu(a2)
-    a3 = np.dot(z2, W3) + b3
-    y = softmax(a3)
-
-    return y
+        accuracy = np.sum(y == t) / float(x.shape[0])
+        
+        return accuracy
      
+    def loss(self, x, t):
+        y = self.predict(x)
+        return cross_entropy_error(y, t)
+    
+    def numerical_gradient(self, x, t):
+        loss_W = lambda W: self.loss(x, t)
+
+        grads = {}
+        grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
+        grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
+        grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
+        grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
+
+        return grads

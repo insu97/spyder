@@ -2,14 +2,13 @@
 #%% import library
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-
-from function.DeepLearning import relu, softmax
-from model.Drug_model import init_network, predict
+from model.Drug_model import simpleNet
 #%% data load
 
 df = pd.read_csv("../data/drug200.csv")
@@ -45,30 +44,58 @@ y_train = y_train[40:]
 ## 은닉층 -> ReLU 사용
 ## 출력층 -> 다중분류 -> Softmax 사용
 
-network = init_network()
+net = simpleNet(input_size=9, hidden_size=6, output_size=5)
+y = net.predict(x_train)
+print(net.accuracy(x_train, y_train))
+print(net.loss(x_train, y_train))
 
-accuracy_cnt = 0
-for i in range(len(x_train)):
-    y = predict(network, x_train[i])
-    p = np.argmax(y)
-    if p == y_train[i]:
-        accuracy_cnt += 1
+#%% mini batch
+# 하이퍼파라미터
+iters_num= 1000
+train_size = x_train.shape[0]
+batch_size = 20
+learning_rate = 0.1
 
-print(f"Accuracy: {float(accuracy_cnt) / len(x_train)}")
+train_loss_list = []
+train_acc_list = []
+test_acc_list = []
 
-#%% batch
+iter_per_epoch = max(train_size / batch_size, 1)
+     
+net = simpleNet(input_size=9, hidden_size=6, output_size=5)
 
-batch_size = 10
-accuracy_cnt = 0
+for i in range(iters_num):
+    # 미니배치 획득
+    batch_mask = np.random.choice(train_size, batch_size)
+    x_batch = x_train[batch_mask]
+    y_batch = y_train[batch_mask]
 
-for i in range(0, len(x_train), batch_size):
-    x_batch = x_train[i:i+batch_size]
-    y_batch = predict(network, x_batch)
-    p = np.argmax(y_batch, axis=1)
-    accuracy_cnt += np.sum(p == y_train[i:i+batch_size])
+    # 기울기 계산
+    grad = net.numerical_gradient(x_batch, y_batch)
 
-print("Accuracy: "+ str(float(accuracy_cnt) / len(x_train)))
+    # 매개변수 갱신
+    for key in ('W1', 'b1', 'W2', 'b2'):
+        net.params[key] -= learning_rate * grad[key]
 
+    # 학습 경과 기록
+    loss = net.loss(x_batch, y_batch)
+    train_loss_list.append(loss)
 
+    # 1에폭당 정확도 계산
+    if i % iter_per_epoch == 0:
+        train_acc = net.accuracy(x_train, y_train)
+        test_acc = net.accuracy(x_test, y_test)
+        train_acc_list.append(train_acc)
+        test_acc_list.append(test_acc)
+        print("train acc, test acc | " + str(train_acc) + ", " + str(test_acc))
 
-
+markers = {'train': 'o', 'test': 's'}
+x = np.arange(len(train_acc_list))
+plt.plot(x, train_acc_list, label='train acc')
+plt.plot(x, test_acc_list, label='test acc', linestyle='--')
+plt.xlabel("epochs")
+plt.ylabel("accuracy")
+plt.ylim(0, 1.0)
+plt.legend(loc='lower right')
+plt.show()
+     
