@@ -5,6 +5,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import Normalizer
 
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
@@ -28,9 +31,21 @@ print("Drug LabelEncoder : ", le.classes_)
 X = df.drop(columns=['Drug'], axis=1)
 y = df['Drug']
 
-y = pd.get_dummies(y)
+#%%%% scaler
+select_scaler = input("Scaler 선택 : ['StandardScaler', 'MinMaxScaler', 'Normalizer']")
 
-X = X.values
+if select_scaler == 'StandardScaler':
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+elif select_scaler == 'MinMaxScaler':
+    scaler = MinMaxScaler()
+    X = scaler.fit_transform(X)
+elif select_scaler == 'Normalizer':
+    scaler = Normalizer()
+    X = scaler.fit_transform(X)
+
+#%%%% train_test_split
+y = pd.get_dummies(y)
 y = y.values
 
 x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
@@ -100,4 +115,10 @@ plt.ylabel("accuracy")
 plt.ylim(0, 1.0)
 plt.legend(loc='lower right')
 plt.show()
-     
+
+# --- 
+x = np.arange(len(train_loss_list))
+plt.plot(x, train_loss_list, label='train_loss')
+plt.xlabel("epochs")  
+plt.ylabel("loss")
+plt.show()   
