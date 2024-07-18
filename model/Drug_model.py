@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 #%% import library
 import numpy as np
-
+from collections import OrderedDict
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
-from function.DeepLearning import relu, softmax, cross_entropy_error, numerical_gradient
+from function.DeepLearning import Relu, Affine, SoftmaxWithLoss
 
 #%% 01. drug_model
 class simpleNet:
@@ -16,38 +16,49 @@ class simpleNet:
         self.params['b1'] = np.zeros(hidden_size)
         self.params['W2'] = weight_init_std * np.random.randn(hidden_size, output_size)
         self.params['b2'] = np.zeros(output_size)
+        
+        # 계층 생성
+        self.layers = OrderedDict()
+        self.layers['Affine1'] = Affine(self.params['W1'], self.params['b1'])
+        self.layers['Relu1'] = Relu()
+        self.layers['Affine2'] = Affine(self.params['W2'], self.params['b2'])
+
+        self.lastLayer = SoftmaxWithLoss()
     
     def predict(self, x):
-        W1, W2 = self.params['W1'], self.params['W2']
-        b1, b2 = self.params['b1'], self.params['b2']
-        a1 = np.dot(x, W1) + b1
-        z1 = relu(a1)
-        a2 = np.dot(z1, W2) + b2
-        y = softmax(a2)
+        for layer in self.layers.values():
+            x = layer.forward(x)
 
-        return y
+        return x
+    
+    def loss(self, x, t):
+        y = self.predict(x)
+        return self.lastLayer.forward(y, t)
     
     def accuracy(self, x, t):
         y = self.predict(x)
         y = np.argmax(y, axis=1)
-        if t.ndim != 1:
-            t = np.argmax(t, axis=1)
+        if t.ndim != 1 : t = np.argmax(t, axis=1)
 
         accuracy = np.sum(y == t) / float(x.shape[0])
-        
         return accuracy
-     
-    def loss(self, x, t):
-        y = self.predict(x)
-        return cross_entropy_error(y, t)
     
-    def numerical_gradient(self, x, t):
-        loss_W = lambda W: self.loss(x, t)
+    def gradient(self, x, t):
+        # forward
+        self.loss(x, t)
 
+        # backward
+        dout = 1
+        dout = self.lastLayer.backward(dout)
+
+        layers = list(self.layers.values())
+        layers.reverse()
+        for layer in layers:
+            dout = layer.backward(dout)
+
+        # 결과 저장
         grads = {}
-        grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
-        grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
-        grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
-        grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
+        grads['W1'], grads['b1'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
+        grads['W2'], grads['b2'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
 
         return grads

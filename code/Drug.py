@@ -28,6 +28,8 @@ print("Drug LabelEncoder : ", le.classes_)
 X = df.drop(columns=['Drug'], axis=1)
 y = df['Drug']
 
+y = pd.get_dummies(y)
+
 X = X.values
 y = y.values
 
@@ -54,7 +56,7 @@ print(net.loss(x_train, y_train))
 iters_num= 1000
 train_size = x_train.shape[0]
 batch_size = 20
-learning_rate = 0.1
+learning_rate = 0.5
 
 train_loss_list = []
 train_acc_list = []
@@ -71,7 +73,7 @@ for i in range(iters_num):
     y_batch = y_train[batch_mask]
 
     # 기울기 계산
-    grad = net.numerical_gradient(x_batch, y_batch)
+    grad = net.gradient(x_batch, y_batch)
 
     # 매개변수 갱신
     for key in ('W1', 'b1', 'W2', 'b2'):

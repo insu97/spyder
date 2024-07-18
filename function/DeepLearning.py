@@ -4,10 +4,56 @@ import numpy as np
 
 #%% define function
 
-def relu(x):
-    return np.maximum(0, x)
+#%%%% 활성화 함수
+class Relu:
+    def __init__(self):
+        self.mask = None
 
+    def forward(self, x):
+        self.mask = (x <= 0)
+        out = x.copy()
+        out[self.mask] = 0
+        return out
 
+    def backward(self, dout):
+        dout[self.mask] = 0
+        dx = dout
+        return dx
+
+class Sigmoid:
+    def __init__(self):
+        self.out = None
+
+    def forward(self, x):
+        out = 1 / (1 + np.exp(-x))
+        self.out = out
+        return out
+
+    def backward(self, dout):
+        dx = dout * (1.0 - self.out) * self.out
+        return dx
+
+#%%%% Affine / SoftmaxWithLoss
+
+class Affine:
+    def __init__(self, W, b):
+        self.W = W
+        self.b = b
+        self.x = None
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        self.x = x
+        out = np.dot(x, self.W) + self.b
+        return out
+
+    def backward(self, dout):
+        dx = np.dot(dout, self.W.T)
+        self.dW = np.dot(self.x.T, dout)
+        self.db = np.sum(dout, axis=0)
+        return dx
+    
 def softmax(x):
     if x.ndim == 2:
         x = x.T
@@ -30,27 +76,19 @@ def cross_entropy_error(y, t):
     batch_size = y.shape[0]
     return -np.sum(np.log(y[np.arange(batch_size), t] + 1e-7)) / batch_size
 
-def numerical_diff(f, x):
-    h = 1e-4 # 0.0001
-    return (f(x+h) - f(x-h)) / (2*h)
+class SoftmaxWithLoss:
+    def __init__(self):
+        self.loss = None
+        self.y = None
+        self.t = None
 
+    def forward(self, x, t):
+        self.t = t
+        self.y = softmax(x)
+        self.loss = cross_entropy_error(self.y, self.t)
+        return self.loss
 
-def numerical_gradient(f, x):
-    h = 1e-4 # 0.0001
-    grad = np.zeros_like(x)
-    
-    it = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
-    while not it.finished:
-        idx = it.multi_index
-        tmp_val = x[idx]
-        x[idx] = float(tmp_val) + h
-        fxh1 = f(x) # f(x+h)
-        
-        x[idx] = tmp_val - h 
-        fxh2 = f(x) # f(x-h)
-        grad[idx] = (fxh1 - fxh2) / (2*h)
-        
-        x[idx] = tmp_val # 값 복원
-        it.iternext()   
-        
-    return grad
+    def backward(self, dout=1):
+        batch_size = self.t.shape[0]
+        dx = (self.y - self.t) / batch_size
+        return dx
