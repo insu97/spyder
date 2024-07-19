@@ -12,6 +12,7 @@ from sklearn.preprocessing import Normalizer
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from model.Drug_model import simpleNet
+from function.DeepLearning import SGD, Momentum, Nesterov, AdaGrad, RMSprop, Adam
 #%% data load
 
 df = pd.read_csv("../data/drug200.csv")
@@ -45,7 +46,7 @@ elif select_scaler == 'Normalizer':
     X = scaler.fit_transform(X)
 
 #%%%% train_test_split
-y = pd.get_dummies(y)
+# y = pd.get_dummies(y)
 y = y.values
 
 x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
@@ -55,23 +56,32 @@ x_train = x_train[40:]
 y_val = y_train[:40]
 y_train = y_train[40:]
 
-#%% DeepLearning
+#%% parameter
 
-# 황성화 함수
-## 은닉층 -> ReLU 사용
-## 출력층 -> 다중분류 -> Softmax 사용
+#%%%% optimizer
 
-net = simpleNet(input_size=9, hidden_size=6, output_size=5)
-y = net.predict(x_train)
-print(net.accuracy(x_train, y_train))
-print(net.loss(x_train, y_train))
+select_optimizer = input("optimizer 선택 : ['SGD','Momentum','Nesterov','AdaGrad','RMSprop','Adam']")
+
+if select_optimizer == 'SGD':
+    optimizer = SGD()
+elif select_optimizer == 'Momentum':
+    optimizer = Momentum()
+elif select_optimizer == 'Nesterov':
+    optimizer = Nesterov()
+elif select_optimizer == 'AdaGrad':
+    optimizer = AdaGrad()
+elif select_optimizer == 'RMSprop':
+    optimizer = RMSprop()
+elif select_optimizer == 'Adam':
+    optimizer = Adam()
 
 #%% mini batch
 # 하이퍼파라미터
-iters_num= 1000
+iters_num= 10000
 train_size = x_train.shape[0]
 batch_size = 20
-learning_rate = 0.5
+learning_rate = 0.01
+dropout_ratio = 0.1
 
 train_loss_list = []
 train_acc_list = []
@@ -79,7 +89,7 @@ test_acc_list = []
 
 iter_per_epoch = max(train_size / batch_size, 1)
      
-net = simpleNet(input_size=9, hidden_size=6, output_size=5)
+net = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=dropout_ratio)
 
 for i in range(iters_num):
     # 미니배치 획득
@@ -89,11 +99,9 @@ for i in range(iters_num):
 
     # 기울기 계산
     grad = net.gradient(x_batch, y_batch)
-
-    # 매개변수 갱신
-    for key in ('W1', 'b1', 'W2', 'b2'):
-        net.params[key] -= learning_rate * grad[key]
-
+    params = net.params
+    optimizer.update(params, grad)
+    
     # 학습 경과 기록
     loss = net.loss(x_batch, y_batch)
     train_loss_list.append(loss)

@@ -5,25 +5,42 @@ from collections import OrderedDict
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
-from function.DeepLearning import Relu, Affine, SoftmaxWithLoss
+from function.DeepLearning import Relu, Affine, SoftmaxWithLoss, Dropout
 
 #%% 01. drug_model
 class simpleNet:
-    def __init__(self, input_size, hidden_size, output_size, weight_init_std=0.01):
+    def __init__(self, input_size, hidden_size_list, output_size, dropout_ratio, weight_init_std='he'):
         # 가중치 초기화
         self.params = {}
-        self.params['W1'] = weight_init_std * np.random.randn(input_size, hidden_size)
-        self.params['b1'] = np.zeros(hidden_size)
-        self.params['W2'] = weight_init_std * np.random.randn(hidden_size, output_size)
-        self.params['b2'] = np.zeros(output_size)
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_size_list = hidden_size_list
+        self.hidden_layer_num = len(hidden_size_list)
+        self.dropout_ratio = dropout_ratio
+        
+        # 가중치 초기화
+        self.__init_weight(weight_init_std)
         
         # 계층 생성
         self.layers = OrderedDict()
-        self.layers['Affine1'] = Affine(self.params['W1'], self.params['b1'])
-        self.layers['Relu1'] = Relu()
-        self.layers['Affine2'] = Affine(self.params['W2'], self.params['b2'])
+        for idx in range(1, self.hidden_layer_num+1):
+            self.layers['Affine' + str(idx)] = Affine(self.params['W' + str(idx)],
+                                                      self.params['b' + str(idx)])
+                
+            self.layers['Activation_function' + str(idx)] = Relu()
+            self.layers['Dropout' + str(idx)] = Dropout(dropout_ratio)
+            
+        idx = self.hidden_layer_num + 1
+        self.layers['Affine' + str(idx)] = Affine(self.params['W' + str(idx)], self.params['b' + str(idx)])
 
-        self.lastLayer = SoftmaxWithLoss()
+        self.last_layer = SoftmaxWithLoss()
+        
+    def __init_weight(self, weight_init_std):
+        all_size_list = [self.input_size] + self.hidden_size_list + [self.output_size]
+        for idx in range(1, len(all_size_list)):
+            scale = np.sqrt(2.0 / all_size_list[idx - 1])  # ReLU
+            self.params['W' + str(idx)] = scale * np.random.randn(all_size_list[idx-1], all_size_list[idx])
+            self.params['b' + str(idx)] = np.zeros(all_size_list[idx])
     
     def predict(self, x):
         for layer in self.layers.values():
@@ -33,7 +50,7 @@ class simpleNet:
     
     def loss(self, x, t):
         y = self.predict(x)
-        return self.lastLayer.forward(y, t)
+        return self.last_layer.forward(y, t)
     
     def accuracy(self, x, t):
         y = self.predict(x)
@@ -49,7 +66,7 @@ class simpleNet:
 
         # backward
         dout = 1
-        dout = self.lastLayer.backward(dout)
+        dout = self.last_layer.backward(dout)
 
         layers = list(self.layers.values())
         layers.reverse()
@@ -58,7 +75,8 @@ class simpleNet:
 
         # 결과 저장
         grads = {}
-        grads['W1'], grads['b1'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
-        grads['W2'], grads['b2'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
+        for idx in range(1, self.hidden_layer_num+2):
+            grads['W' + str(idx)] = self.layers['Affine' + str(idx)].dW
+            grads['b' + str(idx)] = self.layers['Affine' + str(idx)].db
 
         return grads
