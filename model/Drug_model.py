@@ -5,11 +5,11 @@ from collections import OrderedDict
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
-from function.DeepLearning import Relu, Affine, SoftmaxWithLoss, Dropout
+from function.DeepLearning import Relu, Affine, SoftmaxWithLoss, Dropout, BatchNormalization
 
 #%% 01. drug_model
 class simpleNet:
-    def __init__(self, input_size, hidden_size_list, output_size, dropout_ratio, weight_init_std='he'):
+    def __init__(self, input_size, hidden_size_list, output_size, dropout_ratio, weight_init_std='he', weight_decay_lambda=0, use_batchnorm=False):
         # 가중치 초기화
         self.params = {}
         self.input_size = input_size
@@ -17,6 +17,8 @@ class simpleNet:
         self.hidden_size_list = hidden_size_list
         self.hidden_layer_num = len(hidden_size_list)
         self.dropout_ratio = dropout_ratio
+        self.weight_decay_lambda = weight_decay_lambda
+        self.use_batchnorm = use_batchnorm
         
         # 가중치 초기화
         self.__init_weight(weight_init_std)
@@ -26,6 +28,11 @@ class simpleNet:
         for idx in range(1, self.hidden_layer_num+1):
             self.layers['Affine' + str(idx)] = Affine(self.params['W' + str(idx)],
                                                       self.params['b' + str(idx)])
+            
+            if self.use_batchnorm:
+                self.params['gamma' + str(idx)] = np.ones(hidden_size_list[idx-1])
+                self.params['beta' + str(idx)] = np.zeros(hidden_size_list[idx-1])
+                self.layers['BatchNorm' + str(idx)] = BatchNormalization(self.params['gamma' + str(idx)], self.params['beta' + str(idx)])
                 
             self.layers['Activation_function' + str(idx)] = Relu()
             self.layers['Dropout' + str(idx)] = Dropout(dropout_ratio)
@@ -50,7 +57,13 @@ class simpleNet:
     
     def loss(self, x, t):
         y = self.predict(x)
-        return self.last_layer.forward(y, t)
+        
+        weight_decay = 0
+        for idx in range(1, self.hidden_layer_num + 2):
+            W = self.params['W' + str(idx)]
+            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
+        
+        return self.last_layer.forward(y, t) + weight_decay
     
     def accuracy(self, x, t):
         y = self.predict(x)
@@ -76,7 +89,11 @@ class simpleNet:
         # 결과 저장
         grads = {}
         for idx in range(1, self.hidden_layer_num+2):
-            grads['W' + str(idx)] = self.layers['Affine' + str(idx)].dW
+            grads['W' + str(idx)] = self.layers['Affine' + str(idx)].dW + self.weight_decay_lambda * self.params['W' + str(idx)]
             grads['b' + str(idx)] = self.layers['Affine' + str(idx)].db
+            
+            if self.use_batchnorm and idx != self.hidden_layer_num+1:
+                grads['gamma' + str(idx)] = self.layers['BatchNorm' + str(idx)].dgamma
+                grads['beta' + str(idx)] = self.layers['BatchNorm' + str(idx)].dbeta
 
         return grads

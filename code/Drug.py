@@ -8,11 +8,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import Normalizer
+from tqdm import tqdm
 
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from model.Drug_model import simpleNet
-from function.DeepLearning import SGD, Momentum, Nesterov, AdaGrad, RMSprop, Adam
+from function.DeepLearning import SGD, Momentum, Nesterov, AdaGrad, RMSprop, Adam, Trainer
 #%% data load
 
 df = pd.read_csv("../data/drug200.csv")
@@ -62,26 +63,29 @@ y_train = y_train[40:]
 
 select_optimizer = input("optimizer 선택 : ['SGD','Momentum','Nesterov','AdaGrad','RMSprop','Adam']")
 
+learning_rate = 0.01
+
 if select_optimizer == 'SGD':
-    optimizer = SGD()
+    optimizer = SGD(lr=learning_rate)
 elif select_optimizer == 'Momentum':
-    optimizer = Momentum()
+    optimizer = Momentum(lr=learning_rate)
 elif select_optimizer == 'Nesterov':
-    optimizer = Nesterov()
+    optimizer = Nesterov(lr=learning_rate)
 elif select_optimizer == 'AdaGrad':
-    optimizer = AdaGrad()
+    optimizer = AdaGrad(lr=learning_rate)
 elif select_optimizer == 'RMSprop':
-    optimizer = RMSprop()
+    optimizer = RMSprop(lr=learning_rate)
 elif select_optimizer == 'Adam':
-    optimizer = Adam()
+    optimizer = Adam(lr=learning_rate)
 
 #%% mini batch
 # 하이퍼파라미터
 iters_num= 10000
 train_size = x_train.shape[0]
 batch_size = 20
-learning_rate = 0.01
 dropout_ratio = 0.1
+weight_decay_lambda = 0.1
+use_batchnorm = True
 
 train_loss_list = []
 train_acc_list = []
@@ -89,7 +93,7 @@ test_acc_list = []
 
 iter_per_epoch = max(train_size / batch_size, 1)
      
-net = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=dropout_ratio)
+net = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=dropout_ratio, weight_decay_lambda=weight_decay_lambda, use_batchnorm=use_batchnorm)
 
 for i in range(iters_num):
     # 미니배치 획득
@@ -113,7 +117,7 @@ for i in range(iters_num):
         train_acc_list.append(train_acc)
         test_acc_list.append(test_acc)
         print("train acc, test acc | " + str(train_acc) + ", " + str(test_acc))
-
+        
 markers = {'train': 'o', 'test': 's'}
 x = np.arange(len(train_acc_list))
 plt.plot(x, train_acc_list, label='train acc')
@@ -129,4 +133,53 @@ x = np.arange(len(train_loss_list))
 plt.plot(x, train_loss_list, label='train_loss')
 plt.xlabel("epochs")  
 plt.ylabel("loss")
-plt.show()   
+plt.show()
+
+#%% hyperparameter optimization
+def __train(lr, weight_decay, epocs=1000):
+        network = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=dropout_ratio, weight_decay_lambda=weight_decay, use_batchnorm=use_batchnorm)
+        trainer = Trainer(network, x_train, y_train, x_val, y_val,
+                        epochs=epocs, mini_batch_size=100,
+                        optimizer='rmsprpo', optimizer_param={'lr': lr}, verbose=True)
+        trainer.train()
+
+        return trainer.test_acc_list, trainer.train_acc_list
+
+optimization_trial = 20
+results_val = {}
+results_train = {}
+for _ in tqdm(range(optimization_trial)):
+    # 탐색한 하이퍼파라미터의 범위 지정===============
+    weight_decay = 10 ** np.random.uniform(-8, -4)
+    lr = 10 ** np.random.uniform(-6, -2)
+    # ================================================
+
+    val_acc_list, train_acc_list = __train(lr, weight_decay)
+    key = "lr:" + str(lr) + ", weight decay:" + str(weight_decay)
+    results_val[key] = val_acc_list
+    results_train[key] = train_acc_list
+
+# 그래프 그리기========================================================
+print("=========== Hyper-Parameter Optimization Result ===========")
+graph_draw_num = 20
+col_num = 5
+row_num = int(np.ceil(graph_draw_num / col_num))
+i = 0
+
+for key, val_acc_list in sorted(results_val.items(), key=lambda x:x[1][-1], reverse=True):
+    print("Best-" + str(i+1) + "(val acc:" + str(val_acc_list[-1]) + ") | " + key)
+
+    plt.subplot(row_num, col_num, i+1)
+    plt.title("Best-" + str(i+1))
+    plt.ylim(0.0, 1.0)
+    if i % 5: plt.yticks([])
+    plt.xticks([])
+    x = np.arange(len(val_acc_list))
+    plt.plot(x, val_acc_list)
+    plt.plot(x, results_train[key], "--")
+    i += 1
+
+    if i >= graph_draw_num:
+        break
+
+plt.show()

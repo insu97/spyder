@@ -249,3 +249,158 @@ class Dropout:
 
     def backward(self, dout):
         return dout * self.mask
+
+class BatchNormalization:
+    """
+    http://arxiv.org/abs/1502.03167
+    """
+    def __init__(self, gamma, beta, momentum=0.9, running_mean=None, running_var=None):
+        self.gamma = gamma
+        self.beta = beta
+        self.momentum = momentum
+        self.input_shape = None # 합성곱 계층은 4차원, 완전연결 계층은 2차원  
+
+        # 시험할 때 사용할 평균과 분산
+        self.running_mean = running_mean
+        self.running_var = running_var  
+        
+        # backward 시에 사용할 중간 데이터
+        self.batch_size = None
+        self.xc = None
+        self.std = None
+        self.dgamma = None
+        self.dbeta = None
+
+    def forward(self, x, train_flg=True):
+        self.input_shape = x.shape
+        if x.ndim != 2:
+            N, C, H, W = x.shape
+            x = x.reshape(N, -1)
+
+        out = self.__forward(x, train_flg)
+        
+        return out.reshape(*self.input_shape)
+            
+    def __forward(self, x, train_flg):
+        if self.running_mean is None:
+            N, D = x.shape
+            self.running_mean = np.zeros(D)
+            self.running_var = np.zeros(D)
+                        
+        if train_flg:
+            mu = x.mean(axis=0)
+            xc = x - mu
+            var = np.mean(xc**2, axis=0)
+            std = np.sqrt(var + 10e-7)
+            xn = xc / std
+            
+            self.batch_size = x.shape[0]
+            self.xc = xc
+            self.xn = xn
+            self.std = std
+            self.running_mean = self.momentum * self.running_mean + (1-self.momentum) * mu
+            self.running_var = self.momentum * self.running_var + (1-self.momentum) * var            
+        else:
+            xc = x - self.running_mean
+            xn = xc / ((np.sqrt(self.running_var + 10e-7)))
+            
+        out = self.gamma * xn + self.beta 
+        return out
+
+    def backward(self, dout):
+        if dout.ndim != 2:
+            N, C, H, W = dout.shape
+            dout = dout.reshape(N, -1)
+
+        dx = self.__backward(dout)
+
+        dx = dx.reshape(*self.input_shape)
+        return dx
+
+    def __backward(self, dout):
+        dbeta = dout.sum(axis=0)
+        dgamma = np.sum(self.xn * dout, axis=0)
+        dxn = self.gamma * dout
+        dxc = dxn / self.std
+        dstd = -np.sum((dxn * self.xc) / (self.std * self.std), axis=0)
+        dvar = 0.5 * dstd / self.std
+        dxc += (2.0 / self.batch_size) * self.xc * dvar
+        dmu = np.sum(dxc, axis=0)
+        dx = dxc - dmu / self.batch_size
+        
+        self.dgamma = dgamma
+        self.dbeta = dbeta
+        
+        return dx
+#%%%% hyperparameter fitting
+class Trainer:
+    """신경망 훈련을 대신 해주는 클래스
+    """
+    def __init__(self, network, x_train, y_train, x_test, y_test,
+                 epochs=20, mini_batch_size=100,
+                 optimizer='SGD', optimizer_param={'lr':0.01}, 
+                 evaluate_sample_num_per_epoch=None, verbose=True):
+        self.network = network
+        self.verbose = verbose
+        self.x_train = x_train
+        self.y_train = y_train
+        self.x_test = x_test
+        self.y_test = y_test
+        self.epochs = epochs
+        self.batch_size = mini_batch_size
+        self.evaluate_sample_num_per_epoch = evaluate_sample_num_per_epoch
+
+        # optimzer
+        optimizer_class_dict = {'sgd':SGD, 'momentum':Momentum, 'nesterov':Nesterov,
+                                'adagrad':AdaGrad, 'rmsprpo':RMSprop, 'adam':Adam}
+        self.optimizer = optimizer_class_dict[optimizer.lower()](**optimizer_param)
+        
+        self.train_size = x_train.shape[0]
+        self.iter_per_epoch = max(self.train_size / mini_batch_size, 1)
+        self.max_iter = int(epochs * self.iter_per_epoch)
+        self.current_iter = 0
+        self.current_epoch = 0
+        
+        self.train_loss_list = []
+        self.train_acc_list = []
+        self.test_acc_list = []
+
+    def train_step(self):
+        batch_mask = np.random.choice(self.train_size, self.batch_size)
+        x_batch = self.x_train[batch_mask]
+        t_batch = self.y_train[batch_mask]
+        
+        grads = self.network.gradient(x_batch, t_batch)
+        self.optimizer.update(self.network.params, grads)
+        
+        loss = self.network.loss(x_batch, t_batch)
+        self.train_loss_list.append(loss)
+        if self.verbose: print("train loss:" + str(loss))
+        
+        if self.current_iter % self.iter_per_epoch == 0:
+            self.current_epoch += 1
+            
+            x_train_sample, t_train_sample = self.x_train, self.y_train
+            x_test_sample, t_test_sample = self.x_test, self.y_test
+            if not self.evaluate_sample_num_per_epoch is None:
+                t = self.evaluate_sample_num_per_epoch
+                x_train_sample, t_train_sample = self.x_train[:t], self.y_train[:t]
+                x_test_sample, t_test_sample = self.x_test[:t], self.y_test[:t]
+                
+            train_acc = self.network.accuracy(x_train_sample, t_train_sample)
+            test_acc = self.network.accuracy(x_test_sample, t_test_sample)
+            self.train_acc_list.append(train_acc)
+            self.test_acc_list.append(test_acc)
+
+            if self.verbose: print("=== epoch:" + str(self.current_epoch) + ", train acc:" + str(train_acc) + ", test acc:" + str(test_acc) + " ===")
+        self.current_iter += 1
+
+    def train(self):
+        for i in range(self.max_iter):
+            self.train_step()
+
+        test_acc = self.network.accuracy(self.x_test, self.y_test)
+
+        if self.verbose:
+            print("=============== Final Test Accuracy ===============")
+            print("test acc:" + str(test_acc))
