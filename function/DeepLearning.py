@@ -345,8 +345,10 @@ class Trainer:
         self.x_test = x_test
         self.y_test = y_test
         
-        self.lr = 10 ** np.random.uniform(-2,-1)
-        self.weight_decay = 10 ** np.random.uniform(-4, -1)
+        self.hyper_set = {}
+        
+        self.lr = 10 ** np.random.uniform(-1,0)
+        self.weight_decay = 10 ** np.random.uniform(-2, -1)
         
         optimizer_class_dict = {'sgd':SGD, 'momentum':Momentum, 'nesterov':Nesterov,
                                 'adagrad':AdaGrad, 'rmsprpo':RMSprop, 'adam':Adam}
@@ -354,13 +356,14 @@ class Trainer:
         optimizer = random.choice(list(optimizer_class_dict.values()))
         self.optimizer = optimizer(lr = self.lr)
         
-        print('lr : ', self.lr)
-        print('weight_decay : ', self.weight_decay)
-        print('optimizer : ', self.optimizer)
-        
         import sys, os
         sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
         from model.Drug_model import simpleNet
+        
+        # self.hyper_set['lr'] = self.lr
+        # self.hyper_set['weight_decay'] = self.weight_decay
+        # self.hyper_set['optimizer'] = self.optimizer
+        
         self.net = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=0.1, weight_decay_lambda=self.weight_decay, use_batchnorm=True)
         
         self.epochs = 20

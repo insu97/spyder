@@ -77,6 +77,7 @@ elif select_optimizer == 'RMSprop':
     optimizer = RMSprop(lr=learning_rate)
 elif select_optimizer == 'Adam':
     optimizer = Adam(lr=learning_rate)
+    
 
 #%% mini batch
 # 하이퍼파라미터
@@ -149,7 +150,7 @@ for _ in tqdm(range(optimization_trial)):
     
     trainer.train()
     
-    key = "lr:" + str(trainer.lr) + ", weight decay:" + str(trainer.weight_decay)
+    key = "lr:" + str(trainer.lr) + ", weight decay:" + str(trainer.weight_decay) + ", optimizer:" + str(trainer.optimizer)
     
     results_val[key] = trainer.val_acc_list
     results_train[key] = trainer.train_acc_list
