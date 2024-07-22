@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #%% import library
 import numpy as np
-
+import random
 #%% define function
 
 #%%%% 활성화 함수
@@ -333,74 +333,108 @@ class BatchNormalization:
         
         return dx
 #%%%% hyperparameter fitting
+
 class Trainer:
-    """신경망 훈련을 대신 해주는 클래스
-    """
-    def __init__(self, network, x_train, y_train, x_test, y_test,
-                 epochs=20, mini_batch_size=100,
-                 optimizer='SGD', optimizer_param={'lr':0.01}, 
-                 evaluate_sample_num_per_epoch=None, verbose=True):
-        self.network = network
-        self.verbose = verbose
+    
+    def __init__(self, x_train, y_train, x_val, y_val, x_test, y_test):
+        
         self.x_train = x_train
         self.y_train = y_train
+        self.x_val = x_val
+        self.y_val = y_val
         self.x_test = x_test
         self.y_test = y_test
-        self.epochs = epochs
-        self.batch_size = mini_batch_size
-        self.evaluate_sample_num_per_epoch = evaluate_sample_num_per_epoch
-
-        # optimzer
+        
+        self.lr = 10 ** np.random.uniform(-2,-1)
+        self.weight_decay = 10 ** np.random.uniform(-4, -1)
+        
         optimizer_class_dict = {'sgd':SGD, 'momentum':Momentum, 'nesterov':Nesterov,
                                 'adagrad':AdaGrad, 'rmsprpo':RMSprop, 'adam':Adam}
-        self.optimizer = optimizer_class_dict[optimizer.lower()](**optimizer_param)
         
+        optimizer = random.choice(list(optimizer_class_dict.values()))
+        self.optimizer = optimizer(lr = self.lr)
+        
+        print('lr : ', self.lr)
+        print('weight_decay : ', self.weight_decay)
+        print('optimizer : ', self.optimizer)
+        
+        import sys, os
+        sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+        from model.Drug_model import simpleNet
+        self.net = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=0.1, weight_decay_lambda=self.weight_decay, use_batchnorm=True)
+        
+        self.epochs = 20
+        self.batch_size = 20
         self.train_size = x_train.shape[0]
-        self.iter_per_epoch = max(self.train_size / mini_batch_size, 1)
-        self.max_iter = int(epochs * self.iter_per_epoch)
+        self.iter_per_epoch = max(self.train_size / self.batch_size, 1)
+        self.max_iter = int(self.epochs * self.iter_per_epoch)
+        
         self.current_iter = 0
         self.current_epoch = 0
         
         self.train_loss_list = []
         self.train_acc_list = []
+        self.val_acc_list = []
         self.test_acc_list = []
-
+        
     def train_step(self):
+        
         batch_mask = np.random.choice(self.train_size, self.batch_size)
-        x_batch = self.x_train[batch_mask]
-        t_batch = self.y_train[batch_mask]
+        x_train_batch = self.x_train[batch_mask]
+        y_train_batch = self.y_train[batch_mask]
         
-        grads = self.network.gradient(x_batch, t_batch)
-        self.optimizer.update(self.network.params, grads)
+        grads = self.net.gradient(x_train_batch, y_train_batch)
+        self.optimizer.update(self.net.params, grads)
         
-        loss = self.network.loss(x_batch, t_batch)
+        loss = self.net.loss(x_train_batch, y_train_batch)
         self.train_loss_list.append(loss)
-        if self.verbose: print("train loss:" + str(loss))
         
         if self.current_iter % self.iter_per_epoch == 0:
             self.current_epoch += 1
-            
-            x_train_sample, t_train_sample = self.x_train, self.y_train
-            x_test_sample, t_test_sample = self.x_test, self.y_test
-            if not self.evaluate_sample_num_per_epoch is None:
-                t = self.evaluate_sample_num_per_epoch
-                x_train_sample, t_train_sample = self.x_train[:t], self.y_train[:t]
-                x_test_sample, t_test_sample = self.x_test[:t], self.y_test[:t]
+            x_train_sample, y_train_sample = self.x_train, self.y_train
+            x_val_sample, y_val_sample = self.x_val, self.y_val
                 
-            train_acc = self.network.accuracy(x_train_sample, t_train_sample)
-            test_acc = self.network.accuracy(x_test_sample, t_test_sample)
+            train_acc = self.net.accuracy(x_train_sample, y_train_sample)
+            val_acc = self.net.accuracy(x_val_sample, y_val_sample)
             self.train_acc_list.append(train_acc)
-            self.test_acc_list.append(test_acc)
-
-            if self.verbose: print("=== epoch:" + str(self.current_epoch) + ", train acc:" + str(train_acc) + ", test acc:" + str(test_acc) + " ===")
-        self.current_iter += 1
-
+            self.val_acc_list.append(val_acc)
+        
+        return self.train_acc_list, self.val_acc_list
+    
     def train(self):
         for i in range(self.max_iter):
             self.train_step()
-
-        test_acc = self.network.accuracy(self.x_test, self.y_test)
-
-        if self.verbose:
-            print("=============== Final Test Accuracy ===============")
-            print("test acc:" + str(test_acc))
+        
+        test_acc = self.net.accuracy(self.x_test, self.y_test)
+        
+        print("=============== Final Test Accuracy ===============")
+        print("test acc:" + str(test_acc))
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

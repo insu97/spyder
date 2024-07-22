@@ -80,7 +80,7 @@ elif select_optimizer == 'Adam':
 
 #%% mini batch
 # 하이퍼파라미터
-iters_num= 10000
+iters_num= 1000
 train_size = x_train.shape[0]
 batch_size = 20
 dropout_ratio = 0.1
@@ -136,30 +136,24 @@ plt.ylabel("loss")
 plt.show()
 
 #%% hyperparameter optimization
-def __train(lr, weight_decay, epocs=1000):
-        network = simpleNet(9, [6,6,6,6,6], 5, dropout_ratio=dropout_ratio, weight_decay_lambda=weight_decay, use_batchnorm=use_batchnorm)
-        trainer = Trainer(network, x_train, y_train, x_val, y_val,
-                        epochs=epocs, mini_batch_size=100,
-                        optimizer='rmsprpo', optimizer_param={'lr': lr}, verbose=True)
-        trainer.train()
-
-        return trainer.test_acc_list, trainer.train_acc_list
 
 optimization_trial = 20
+
 results_val = {}
 results_train = {}
+results_test = {}
+
 for _ in tqdm(range(optimization_trial)):
-    # 탐색한 하이퍼파라미터의 범위 지정===============
-    weight_decay = 10 ** np.random.uniform(-8, -4)
-    lr = 10 ** np.random.uniform(-6, -2)
-    # ================================================
-
-    val_acc_list, train_acc_list = __train(lr, weight_decay)
-    key = "lr:" + str(lr) + ", weight decay:" + str(weight_decay)
-    results_val[key] = val_acc_list
-    results_train[key] = train_acc_list
-
-# 그래프 그리기========================================================
+    
+    trainer = Trainer(x_train, y_train, x_val, y_val, x_test, y_test)
+    
+    trainer.train()
+    
+    key = "lr:" + str(trainer.lr) + ", weight decay:" + str(trainer.weight_decay)
+    
+    results_val[key] = trainer.val_acc_list
+    results_train[key] = trainer.train_acc_list
+    
 print("=========== Hyper-Parameter Optimization Result ===========")
 graph_draw_num = 20
 col_num = 5
@@ -183,3 +177,11 @@ for key, val_acc_list in sorted(results_val.items(), key=lambda x:x[1][-1], reve
         break
 
 plt.show()
+    
+    
+    
+    
+
+
+
+
